@@ -1,43 +1,61 @@
 from rest_framework import serializers
-from .models import MenuItem, Category, Cart, Order, OrderItem
+from django.contrib.auth.models import User
+from decimal import Decimal
+from .models import Category, MenuItem, Cart, Order, OrderItem
 
 
-class CategorySerializer(serializers.ModelSerializer):
+class CategorySerializer (serializers.ModelSerializer):
     class Meta:
         model = Category
-        fields = ['id', 'slug', 'title']
-        
-        
+        fields = ['id', 'title', 'slug']
+
+
 class MenuItemSerializer(serializers.ModelSerializer):
-    # Adding a nested serializer here to provide readable category details in the serialized data.
-    category = CategorySerializer(read_only=True)
-    
+    category = serializers.PrimaryKeyRelatedField(
+        queryset=Category.objects.all()
+    )
+    # category = CategorySerializer(read_only=True)
     class Meta:
         model = MenuItem
-        fields = ['id', 'title', 'price', 'featured', 'category']
-        
+        fields = ['id', 'title', 'price', 'category', 'featured']
+
 
 class CartSerializer(serializers.ModelSerializer):
-    # Using related_name attribute in model ForeignKey
-    user = serializers.StringRelatedField(read_only=True)
-    menuitem = MenuItemSerializer(read_only=True) # For user-friendly representation
-    
+    user = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(),
+        default=serializers.CurrentUserDefault()
+    )
+
+
+    def validate(self, attrs):
+        attrs['price'] = attrs['quantity'] * attrs['unit_price']
+        return attrs
+
     class Meta:
         model = Cart
-        fields = ['id', 'user', 'menuitem', 'quantity', 'unit_price', 'price']
-        
-# This will be used as a nested serializer inside the Order Serializer to represent items in an order.
+        fields = ['user', 'menuitem', 'unit_price', 'quantity', 'price']
+        extra_kwargs = {
+            'price': {'read_only': True}
+        }
+
+
 class OrderItemSerializer(serializers.ModelSerializer):
-    menuitem = MenuItemSerializer(read_only=True)
-    
     class Meta:
         model = OrderItem
-        fields = ['id', 'menuitem', 'quantity', 'unit_price', 'price']
-        
+        fields = ['order', 'menuitem', 'quantity', 'price']
+
+
 class OrderSerializer(serializers.ModelSerializer):
-    user = serializers.StringRelatedField(read_only=True)
-    items = OrderItemSerializer(many=True, source='orderitem_set')  # Nested serializer for items in order
-    
+
+    orderitem = OrderItemSerializer(many=True, read_only=True, source='order')
+
     class Meta:
         model = Order
-        fields = ['id', 'user', 'delivery_crew', 'status', 'total', 'date', 'items']
+        fields = ['id', 'user', 'delivery_crew',
+                  'status', 'date', 'total', 'orderitem']
+
+
+class UserSerilializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['id','username','email']
